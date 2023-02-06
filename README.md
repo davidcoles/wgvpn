@@ -1,6 +1,6 @@
 # WGVPN
 
-A proof-of-concept MacOS client for a simple managed WireGuard VPN service
+A proof-of-concept macOS client for a simple managed WireGuard VPN service
 
 ## Introduction
 
@@ -99,9 +99,9 @@ Returns:
 ```
 
 
-## Native MacOS client
+## Native macOS client
 
-This is a PoC. The intention would be to build a first-class MacOS
+This is a PoC. The intention would be to build a first-class macOS
 implementation in Swift with appropriate entitlements. Alas, I am not
 an Apple developer.
 
