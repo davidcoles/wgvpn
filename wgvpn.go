@@ -40,8 +40,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/davidcoles/certstore"
+
 	"github.com/caseymrm/menuet"
-	"github.com/github/smimesign/certstore"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/crypto/curve25519"
 )
@@ -61,8 +62,6 @@ var BEACON = "api/1/beacon"
 var STATUS = "api/1/status"
 
 var CLIENT *http.Client
-
-const NILPUB = "L+V9o0fNYkMVKNqsX7spBzD/9oSvxM/C7ZCZX1jLO3Q="
 
 type Private [32]byte
 
@@ -119,14 +118,14 @@ func main() {
 		},
 	}
 
-	go gPN(*cm, args)
+	go start(*cm, args)
 
 	menuet.App().Name = NAME
 	menuet.App().Label = "VPN"
 	menuet.App().RunApplication()
 }
 
-func gPN(cm bool, args []string) {
+func start(cm bool, args []string) {
 
 	var client *http.Client
 	var account string
@@ -147,13 +146,13 @@ func gPN(cm bool, args []string) {
 	}
 
 	if cm {
-		gRNkey(client, account)
+		getkey(client, account)
 	} else {
-		gPNfe(client, "", Private{}, true)
+		frontend(client, "", Private{}, false)
 	}
 }
 
-func gRNkey(client *http.Client, account string) {
+func getkey(client *http.Client, account string) {
 
 	keypeer, err := retrievekey(SERVICE, account)
 
@@ -247,7 +246,7 @@ func gRNkey(client *http.Client, account string) {
 
 	fmt.Println("PUBKEY", pub)
 
-	gPNfe(client, peer, key, false)
+	frontend(client, peer, key, true)
 }
 
 func tsf(x uint64) string {
@@ -279,8 +278,8 @@ func tsf(x uint64) string {
 	return fmt.Sprintf("%.2f%s", n, suffix[0])
 }
 
-func gPNfe(client *http.Client, peer string, key Private, up bool) {
-	//var up bool
+func frontend(client *http.Client, peer string, key Private, full bool) {
+	var up bool
 	pub := encode(pubkey(key))
 
 	var rx, tx uint64
@@ -307,11 +306,14 @@ func gPNfe(client *http.Client, peer string, key Private, up bool) {
 			},
 		})
 
-		if pub != NILPUB {
-			label := "Enable"
+		if full {
+
+			//items = append(items, menuet.MenuItem{Type: menuet.Separator})
+
+			label := DOMAIN
 
 			if up {
-				label = fmt.Sprintf("Enable Tx %sB/s, Rx %sB/s", tsf(txps), tsf(rxps))
+				label = fmt.Sprintf(DOMAIN+" Tx %sB/s, Rx %sB/s", tsf(txps), tsf(rxps))
 			}
 
 			items = append(items, menuet.MenuItem{
@@ -372,6 +374,8 @@ func gPNfe(client *http.Client, peer string, key Private, up bool) {
 					}
 				},
 			})
+
+			//items = append(items, menuet.MenuItem{Type: menuet.Separator})
 
 			items = append(items, menuet.MenuItem{
 				Type: "Keys",
@@ -679,7 +683,6 @@ func identity(cn string) (certstore.Identity, string, error) {
 		crt, err := ident.Certificate()
 
 		if err == nil && crt.Issuer.CommonName == cn {
-			//ident.Close()
 			return ident, crt.Subject.CommonName, nil
 		}
 
@@ -873,6 +876,7 @@ func get200(client *http.Client, url string) ([]byte, error) {
 	resp, err := client.Get(url)
 
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 
@@ -900,13 +904,14 @@ func wgtool() {
 
 	os.Remove(SOCKET)
 	exec.Command("mkdir", DIRECTORY).Output()
-	s, err := net.Listen("unix", SOCKET)
-	exec.Command("chown", "root:staff", SOCKET).Output()
-	exec.Command("chmod", "g+rw", SOCKET).Output()
 
+	s, err := net.Listen("unix", SOCKET)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	exec.Command("chown", "root:staff", SOCKET).Output()
+	exec.Command("chmod", "g+rw", SOCKET).Output()
 
 	var utun string
 	var mu1, mu2 sync.Mutex
