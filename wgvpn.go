@@ -53,8 +53,8 @@ const BASEURL = "http://localhost/"
 
 var ROOTCA = "MyCA"
 var NAME = "MyVPN"
-var SERVICE = "MyVPN"
 var DOMAIN = "vpn.example.com"
+var SERVICE = DOMAIN
 var PORTAL = "https://" + DOMAIN + "/"
 var ACTIVE = "activate"
 var CONFIG = "api/1/config"
@@ -263,10 +263,6 @@ func tsf(x uint64) string {
 		suffix = suffix[1:]
 	}
 
-	if len(suffix) == 0 {
-		return "Many" // 2^64 won't get this high anyway
-	}
-
 	if n > 100 {
 		return fmt.Sprintf("%.0f%s", n, suffix[0])
 	}
@@ -328,6 +324,7 @@ func frontend(client *http.Client, peer string, key Private, full bool) {
 						update <- true
 						update <- true
 					} else {
+
 						wg := getconfig(client, PORTAL+CONFIG, pub)
 
 						if wg == nil {
@@ -858,7 +855,7 @@ func get(client *http.Client, url, param string) (bool, error) {
 		return false, nil
 	}
 
-	var cf map[string]bool
+	var cf map[string]interface{}
 
 	err = json.Unmarshal(js, &cf)
 
@@ -868,7 +865,13 @@ func get(client *http.Client, url, param string) (bool, error) {
 
 	//log.Println("****", cf)
 
-	return cf[param], nil
+	if v, ok := cf[param]; ok {
+		if b, ok := v.(bool); ok {
+			return b, nil
+		}
+	}
+	return false, nil
+	//return cf[param], nil
 }
 
 func get200(client *http.Client, url string) ([]byte, error) {
