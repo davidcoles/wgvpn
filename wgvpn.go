@@ -168,8 +168,9 @@ func getkey(client *http.Client, account string) {
 		}
 
 		key := encode(k)
+		pub := encode(pubkey(k))
 
-		wg := getconfig(client, PORTAL+CONFIG, encode(pubkey(k)))
+		wg := getconfig(client, PORTAL+CONFIG, pub)
 
 		if wg == nil {
 			alert := menuet.Alert{Buttons: []string{"OK"}}
@@ -208,6 +209,7 @@ func getkey(client *http.Client, account string) {
 		alert.InformativeText = "A new " + SERVICE + " key for device " + account + " was generated and stored in your keychain"
 		menuet.App().Alert(alert)
 
+		getconfig(client, PORTAL+CONFIG, pub)
 	}
 
 	kp := strings.Split(keypeer, ":")
@@ -438,11 +440,13 @@ func frontend(client *http.Client, peer string, key Private, full bool) {
 
 		_, err := get200(client, PORTAL+BEACON)
 		//b, _ := get(client, PORTAL+BEACON, "beacon")
+		//fmt.Println("BEACON:", err)
 		if err == nil {
 			x |= 0x2
 		}
 
-		a, e := get(client, PORTAL+STATUS, "active")
+		a, e := get(client, PORTAL+STATUS, "authenticated")
+		//fmt.Println("ACTIVE:", e)
 		if a {
 			x |= 0x1
 		}
@@ -453,7 +457,7 @@ func frontend(client *http.Client, peer string, key Private, full bool) {
 		l = PORTAL
 		i = I_DOWN
 
-		if u {
+		if u || !full {
 			switch x {
 			case 3:
 				i = I_ESTABLISHED
@@ -479,6 +483,8 @@ func frontend(client *http.Client, peer string, key Private, full bool) {
 		menuet.App().SetMenuState(&menuet.MenuState{
 			Title: NAME + icon,
 		})
+
+		menuet.App().MenuChanged()
 
 		if l != link || i != icon || t != text || u != up {
 			link = l
@@ -762,6 +768,52 @@ func decode(s string) (key [32]byte, b bool) {
 
 func getconfig(client *http.Client, url string, pub string) *WireGuard {
 
+	/*
+		type message struct {
+			PublicKey string
+		}
+
+		m := message{PublicKey: pub}
+		j, err := json.Marshal(&m)
+
+		fmt.Println(url, string(j))
+
+		resp, err := client.Post(url, "application/json", bytes.NewReader(j))
+	*/
+
+	resp, err := client.Get(url)
+
+	fmt.Println(err)
+
+	if err != nil {
+		return nil
+	}
+
+	defer resp.Body.Close()
+
+	js, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		return nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var wg WireGuard
+
+	err = json.Unmarshal(js, &wg)
+
+	if err != nil {
+		return nil
+	}
+
+	return &wg
+}
+
+func _getconfig(client *http.Client, url string, pub string) *WireGuard {
+
 	type message struct {
 		PublicKey string
 	}
@@ -769,9 +821,11 @@ func getconfig(client *http.Client, url string, pub string) *WireGuard {
 	m := message{PublicKey: pub}
 	j, err := json.Marshal(&m)
 
+	fmt.Println(url, string(j))
+
 	resp, err := client.Post(url, "application/json", bytes.NewReader(j))
 
-	//resp, err := client.Get(url)
+	fmt.Println(err)
 
 	if err != nil {
 		return nil
@@ -827,7 +881,11 @@ func cert(pem string) (*http.Client, string, error) {
 		return nil, account, nil
 	}
 
-	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	transport := &http.Transport{
+		TLSClientConfig:     tlsConfig,
+		TLSHandshakeTimeout: 1 * time.Second,
+	}
+
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   2 * time.Second,
